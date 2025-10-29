@@ -47,6 +47,7 @@ from .wqb_urls import (
     URL_DATASETS_DATASETID,
     URL_OPERATORS,
     URL_SIMULATIONS,
+    URL_SIMULATIONS_RESULT,
     URL_USERS_SELF_ALPHAS,
 )
 
@@ -1359,3 +1360,28 @@ class WQBSession(AutoAuthSession):
                 )
             )
         return resp
+
+    async def locate_simulation(
+            self,
+            simulation_id: str,
+            *args,
+            max_tries: int | Iterable[Any] = range(3),
+            log: str | None = '',
+            retry_log: str | None = None,
+            **kwargs,
+        ) -> Coroutine[None, None, Response | None]:
+            url = URL_SIMULATIONS_RESULT.format(simulation_id)
+            resp = await self.retry(
+                GET, url, *args, max_tries=max_tries, log=retry_log, **kwargs
+            )
+            if log is not None:
+                self.logger.info(
+                    '\n'.join(
+                        (
+                            f"{self}.check(...) [",
+                            f"    {url}",
+                            f"]: {log}",
+                        )
+                    )
+                )
+            return resp
