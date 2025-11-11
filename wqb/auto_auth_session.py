@@ -1,7 +1,10 @@
 import logging
 import time
 from collections.abc import Callable
+from typing import Optional
 from requests import Response, Session
+from . import RETRY_AFTER
+from . import RETRY_AFTER
 
 __all__ = ['AutoAuthSession']
 
@@ -49,20 +52,21 @@ class AutoAuthSession(Session):
 
     def auth_request(
         self,
-        method: str | None = None,
-        url: str | None = None,
+        method: Optional[str] = None,
+        url: Optional[str] = None,
         *args,
-        expected: Callable[[Response], bool] | None = None,
-        max_tries: int | None = None,
-        delay_unexpected: float | None = None,
-        log: str | None = None,
+        expected: Optional[Callable[[Response], bool]] = None,
+        max_tries: Optional[int] = None,
+        delay_unexpected: Optional[float] = None,
+        log: Optional[str] = None,
         **kwargs,
     ) -> Response:
         if method is None:
             method = self.method
         if url is None:
             url = self.url
-        kwargs = self.kwargs | kwargs
+        # Use a Python 3.8+ compatible dict merge
+        kwargs = {**self.kwargs, **kwargs}
         if expected is None:
             expected = self.auth_expected
         if max_tries is None:
@@ -71,11 +75,24 @@ class AutoAuthSession(Session):
             delay_unexpected = self.auth_delay_unexpected
         max_tries = max(1, max_tries)
         delay_unexpected = max(0.0, delay_unexpected)
+        tries = 0
+        resp = Response()
         for tries in range(1, 1 + max_tries):
             resp = super().request(method, url, *args, **kwargs)
             if expected(resp):
                 break
-            time.sleep(delay_unexpected)
+            # Respect server rate limiting if provided
+            if resp.status_code == 429:
+                retry_after = resp.headers.get(RETRY_AFTER)
+                try:
+                    if retry_after is not None:
+                        time.sleep(float(retry_after))
+                    else:
+                        time.sleep(delay_unexpected)
+                except ValueError:
+                    time.sleep(delay_unexpected)
+            else:
+                time.sleep(delay_unexpected)
         else:
             self.logger.warning(
                 '\n'.join(
@@ -105,10 +122,10 @@ class AutoAuthSession(Session):
         method: str,
         url: str,
         *args,
-        expected: Callable[[Response], bool] | None = None,
-        max_tries: int | None = None,
-        delay_unexpected: float | None = None,
-        log: str | None = None,
+        expected: Optional[Callable[[Response], bool]] = None,
+        max_tries: Optional[int] = None,
+        delay_unexpected: Optional[float] = None,
+        log: Optional[str] = None,
         **kwargs,
     ) -> Response:
         if expected is None:
@@ -119,12 +136,29 @@ class AutoAuthSession(Session):
             delay_unexpected = self.delay_unexpected
         max_tries = max(1, max_tries)
         delay_unexpected = max(0.0, delay_unexpected)
+        tries = 0
+        resp = Response()
         for tries in range(1, 1 + max_tries):
             resp = super().request(method, url, *args, **kwargs)
             if expected(resp):
                 break
-            time.sleep(delay_unexpected)
-            auth_resp = self.auth_request()
+            # Handle specific unexpected statuses
+            if resp.status_code == 401:
+                # Only re-authenticate on unauthorized
+                self.auth_request()
+                time.sleep(delay_unexpected)
+            elif resp.status_code == 429:
+                # Honor rate limiting
+                retry_after = resp.headers.get(RETRY_AFTER)
+                try:
+                    if retry_after is not None:
+                        time.sleep(float(retry_after))
+                    else:
+                        time.sleep(delay_unexpected)
+                except ValueError:
+                    time.sleep(delay_unexpected)
+            else:
+                time.sleep(delay_unexpected)
         else:
             self.logger.warning(
                 '\n'.join(
