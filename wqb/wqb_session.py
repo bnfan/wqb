@@ -1182,7 +1182,7 @@ class WQBSession(AutoAuthSession):
             json=target,
             expected=self.expected_location,
             max_tries=60,
-            delay_unexpected=5.0,
+            delay_unexpected=15.0,
         )
         try:
             url = resp.headers[LOCATION]

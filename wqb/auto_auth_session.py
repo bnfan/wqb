@@ -152,10 +152,13 @@ class AutoAuthSession(Session):
                 retry_after = resp.headers.get(RETRY_AFTER)
                 try:
                     if retry_after is not None:
+                        self.logger.warning(f'retry_after detected, sleeping:{float(retry_after)}')
                         time.sleep(float(retry_after))
                     else:
+                        self.logger.warning(f'retry_after no, tries:{tries}, sleeping:{float(delay_unexpected)}...{resp.text}')
                         time.sleep(delay_unexpected)
                 except ValueError:
+                    self.logger.warning(f'ValueError, sleeping:{float(delay_unexpected)}')
                     time.sleep(delay_unexpected)
             else:
                 time.sleep(delay_unexpected)
