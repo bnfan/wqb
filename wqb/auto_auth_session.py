@@ -84,6 +84,7 @@ class AutoAuthSession(Session):
             # Respect server rate limiting if provided
             if resp.status_code == 429:
                 retry_after = resp.headers.get(RETRY_AFTER)
+                print('---------------retry_after---------------', retry_after)
                 try:
                     if retry_after is not None:
                         time.sleep(float(retry_after))
@@ -92,6 +93,7 @@ class AutoAuthSession(Session):
                 except ValueError:
                     time.sleep(delay_unexpected)
             else:
+                print('---------------delay_unexpected---------------', delay_unexpected)
                 time.sleep(delay_unexpected)
         else:
             self.logger.warning(
